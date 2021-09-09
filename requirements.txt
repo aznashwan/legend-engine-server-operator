@@ -1,1 +1,4 @@
-ops >= 1.2.0
+# ops >= 1.2.0
+# NOTE(aznashwan 06/09/21): Pypi package doesn't feature the
+# `container.is_ready()` decorator so we install from git:
+git+https://github.com/canonical/operator.git

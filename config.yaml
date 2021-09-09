@@ -1,14 +1,61 @@
 # Copyright 2021 Canonical
 # See LICENSE file for licensing details.
-#
-# TEMPLATE-TODO: change this example to suit your needs.
-# If you don't need a config, you can remove the file entirely.
-# It ties in to the example _on_config_changed handler in src/charm.py
-#
-# Learn more about config at: https://juju.is/docs/sdk/config
 
 options:
-  thing:
-    default: 🎁
-    description: A thing used by the charm.
+
+  ### Application-related options:
+  server-deployment-mode:
+    type: string
+    # TODO(aznashwan): check what other possible modes there are and
+    # offer a more detailed description on them.
+    default: TEST_IGNORE_FUNCTION_MATCH
+    description: Server deployment mode.
+
+  # TODO(aznashwan): determine if usecase of multiple connectors
+  # on different ports is worth pursuing and parameterizing:
+  server-application-connector-port-http:
+    type: int
+    default: 6060
+    description: |
+      The port number on which application traffic should be served.
+  
+  # TODO(aznashwan): add a separate option for https endpoints?
+  # Will need to see what certificates needs installing and where.
+
+  server-root-path:
+    type: string
+    default: /api
+    description: |
+      The root path (exluding protocol, host, or port declaration) under
+      which API calls should be made.
+
+  server-logging-level:
+    type: string
+    default: INFO
+    description: |
+      String identifier of the log level to be used for all library classes.
+      Must be one of INFO, WARN, DEBUG, or TRACE, or OFF.
+
+  server-pac4j-logging-level:
+    type: string
+    default: "DEBUG"
+    description: |
+      String identifier of the log level to be used by authentication-related
+      PAC4J actions. Must be one of INFO, WARN, DEBUG, or TRACE, or OFF.
+
+  server-logging-format:
+    type: string
+    default: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%thread] %c - %m%n"
+    description: |
+      Pattern to be used for log formatting.
+      Must comply to the `java.util.logging` format string definitions:
+      https://docs.oracle.com/en/java/javase/11/docs/api/java.logging/java/util/logging/SimpleFormatter.html
+
+  # TODO(aznashwan): ask whether 'opentracing' options are worth exposing.
+  # https://github.com/finos/legend/blob/master/installers/docker-compose/shared/templates/engine/config.json#L45
+
+  # TODO(aznashwan): remove these after gitlab relation defined:
+  gitlab-client-id:
+    type: string
+  gitlab-client-secret:
     type: string
