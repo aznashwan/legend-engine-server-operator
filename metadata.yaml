@@ -1,6 +1,6 @@
 # Copyright 2021 Canonical
 # See LICENSE file for licensing details.
-#
+
 name: legend-engine-server-operator
 
 # TODO(aznashwan): ask who should be here:
@@ -22,8 +22,8 @@ tags:
 - legend
 
 requires:
-  db:
-    interface: mongodb_datastore
+  legend-db:
+    interface: legend_mongodb
     # TODO(aznashwan): will we need a second relation for the PAC4J Mongo
     # backend settings or can we have two databases created in just one?
     limit: 1

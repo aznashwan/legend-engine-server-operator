@@ -5,15 +5,13 @@
 """ Module defining the Charmed operator for the FINOS Legend Engine Server. """
 
 import functools
+import json
 import logging
 
 from ops import charm
 from ops import framework
 from ops import main
 from ops import model
-import json
-
-from charms.mongodb_k8s.v0 import mongodb
 
 LOG = logging.getLogger(__name__)
 
@@ -56,10 +54,6 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
 
         self._set_stored_defaults()
 
-        # MongoDB consumer setup:
-        self._mongodb_consumer = mongodb.MongoConsumer(
-            self, "db", {"mongodb": ">=4.0"}, multi=False)
-
         # Standard charm lifecycle events:
         self.framework.observe(
             self.on.config_changed, self._on_config_changed)
@@ -68,10 +62,10 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
 
         # DB relation lifecycle events:
         self.framework.observe(
-            self.on["db"].relation_joined,
+            self.on["legend-db"].relation_joined,
             self._on_db_relation_joined)
         self.framework.observe(
-            self.on["db"].relation_changed,
+            self.on["legend-db"].relation_changed,
             self._on_db_relation_changed)
 
     def _set_stored_defaults(self) -> None:
@@ -263,11 +257,12 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
                 "requestLog": {"appenders": []},
                 "connector": {
                     "maxRequestHeaderSize": "32KiB",
-                    "type": "http",
-                    "port": 6060
+                    "type": APPLICATION_CONNECTOR_TYPE_HTTP,
+                    "port": self.model.config[
+                        'server-application-connector-port-http']
                 },
             },
-            # TODO(aznashwan): check whether this is how you reference the SDLC.
+            # TODO(aznashwan): check whether this is how you reference the SDLC
             "metadataserver": {
                 "pure": {
                     "host": "127.0.0.1",
@@ -347,37 +342,32 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
     @_logged_charm_entry_point
     def _on_db_relation_changed(
             self, event: charm.RelationChangedEvent) -> None:
-        # _ = self.model.get_relation(event.relation.name, event.relation.id)
         rel_id = event.relation.id
-
-        # Check whether credentials for a database are available:
-        mongo_creds = self._mongodb_consumer.credentials(rel_id)
-        if not mongo_creds:
-            LOG.info(
-                "No MongoDB database credentials present in relation. "
-                "Returning now to await their availability.")
+        rel = self.framework.model.get_relation("legend-db", rel_id)
+        mongo_creds_json = rel.data[event.app].get("legend-db-connection")
+        if not mongo_creds_json:
             self.unit.status = model.WaitingStatus(
-                "Waiting for MongoDB database credentials.")
+                "Awaiting DB relation data.")
+            event.defer()
             return
-        LOG.info(
-            "Current MongoDB database creds provided by relation are: %s",
+        LOG.debug(
+            "Mongo JSON credentials returned by DB relation: %s",
+            mongo_creds_json)
+
+        mongo_creds = None
+        try:
+            mongo_creds = json.loads(mongo_creds_json)
+        except (ValueError, TypeError) as ex:
+            LOG.warn(
+                "Exception occured while deserializing DB relation "
+                "connection data: %s", str(ex))
+            self.unit.status = model.BlockedStatus(
+                "Could not deserialize Legend DB connection data.")
+            return
+        LOG.debug(
+            "Deserialized Mongo credentials returned by DB relation: %s",
             mongo_creds)
 
-        # Check whether the databases were created:
-        databases = self._mongodb_consumer.databases(rel_id)
-        if not databases:
-            LOG.info(
-                "No MongoDB database currently present in relation. "
-                "Requesting creation now.")
-            self._mongodb_consumer.new_database()
-            self.unit.status = model.WaitingStatus(
-                "Waiting for MongoDB database creation.")
-            return
-        LOG.info(
-            "Current MongoDB databases provided by the relation are: %s",
-            databases)
-        # NOTE(aznashwan): we hackily add the databases in here too:
-        mongo_creds['databases'] = databases
         self._stored.mongodb_credentials = mongo_creds
 
         # Attempt to reconfigure and restart the service with the new data:
