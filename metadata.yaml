@@ -30,6 +30,11 @@ requires:
     optional: false
     scope: global
 
+provides:
+  legend-engine:
+    interface: legend_engine
+    scope: global
+
 containers:
   engine:
     resource: engine-image

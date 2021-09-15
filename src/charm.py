@@ -6,6 +6,7 @@
 
 import json
 import logging
+import subprocess
 
 from ops import charm
 from ops import framework
@@ -16,6 +17,7 @@ from ops import model
 logger = logging.getLogger(__name__)
 
 ENGINE_CONFIG_FILE_CONTAINER_LOCAL_PATH = "/engine-config.json"
+ENGINE_SERVICE_URL_FORMAT = "%(schema)s://%(host)s:%(port)s%(path)s"
 
 APPLICATION_CONNECTOR_TYPE_HTTP = "http"
 APPLICATION_CONNECTOR_TYPE_HTTPS = "https"
@@ -53,6 +55,14 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         self.framework.observe(
             self.on["legend-db"].relation_changed,
             self._on_db_relation_changed)
+
+        # Studio relation events:
+        self.framework.observe(
+            self.on["legend-engine"].relation_joined,
+            self._on_studio_relation_joined)
+        self.framework.observe(
+            self.on["legend-engine"].relation_changed,
+            self._on_studio_relation_changed)
 
     def _set_stored_defaults(self) -> None:
         self._stored.set_default(log_level="DEBUG")
@@ -354,6 +364,29 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
 
         # Attempt to reconfigure and restart the service with the new data:
         self._reconfigure_engine_service()
+
+    def _get_engine_service_url(self):
+        ip_address = subprocess.check_output(
+            ["unit-get", "private-address"]).decode().strip()
+        return ENGINE_SERVICE_URL_FORMAT % ({
+            # NOTE(aznashwan): we always return the plain HTTP endpoint:
+            "schema": "http",
+            "host": ip_address,
+            "port": self.model.config[
+                "server-application-connector-port-http"],
+            "path": self.model.config["server-root-path"]})
+
+    def _on_studio_relation_joined(
+            self, event: charm.RelationJoinedEvent) -> None:
+        rel = event.relation
+        engine_url = self._get_engine_service_url()
+        logger.info(
+            "### Providing following Engine URL to Studio: %s", engine_url)
+        rel.data[self.app]["legend-engine-url"] = engine_url
+
+    def _on_studio_relation_changed(
+            self, event: charm.RelationChangedEvent) -> None:
+        pass
 
 
 if __name__ == "__main__":
