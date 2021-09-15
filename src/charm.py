@@ -4,7 +4,6 @@
 
 """ Module defining the Charmed operator for the FINOS Legend Engine Server. """
 
-import functools
 import json
 import logging
 
@@ -13,8 +12,8 @@ from ops import framework
 from ops import main
 from ops import model
 
-LOG = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 ENGINE_CONFIG_FILE_CONTAINER_LOCAL_PATH = "/engine-config.json"
 
@@ -29,19 +28,6 @@ GITLAB_PROJECT_VISIBILITY_PRIVATE = "private"
 GITLAB_REQUIRED_SCOPES = ["openid", "profile", "api"]
 GITLAB_OPENID_DISCOVERY_URL = (
     "https://gitlab.com/.well-known/openid-configuration")
-
-
-def _logged_charm_entry_point(fun):
-    """ Add logging for method call/exits. """
-    @functools.wraps(fun)
-    def _inner(*args, **kwargs):
-        LOG.info(
-            "### Initiating Legend Engine charm call to '%s'", fun.__name__)
-        res = fun(*args, **kwargs)
-        LOG.info(
-            "### Completed Legend Engine charm call to '%s'", fun.__name__)
-        return res
-    return _inner
 
 
 class LegendEngineServerOperatorCharm(charm.CharmBase):
@@ -72,7 +58,6 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         self._stored.set_default(log_level="DEBUG")
         self._stored.set_default(mongodb_credentials={})
 
-    @_logged_charm_entry_point
     def _on_engine_pebble_ready(self, event: framework.EventBase) -> None:
         """Define the Engine workload using the Pebble API.
         Note that this will *not* start the service, but instead leave it in a
@@ -130,7 +115,7 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         """
         value = self.model.config[option_name]
         if value not in VALID_APPLICATION_LOG_LEVEL_SETTINGS:
-            LOG.warning(
+            logger.warning(
                 "Invalid Java logging level value provided for option "
                 "'%s': '%s'. Valid Java logging levels are: %s. The charm "
                 "shall block until a proper value is set.",
@@ -279,23 +264,23 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         """Renders provided config to JSON and pushes it to the container
         through the Pebble files API.
         """
-        LOG.debug(
+        logger.debug(
             "Adding following config under '%s' in container: %s",
             ENGINE_CONFIG_FILE_CONTAINER_LOCAL_PATH, config)
         container.push(
             ENGINE_CONFIG_FILE_CONTAINER_LOCAL_PATH,
             json.dumps(config),
             make_dirs=True)
-        LOG.info(
+        logger.info(
             "Successfully wrote config file '%s'",
             ENGINE_CONFIG_FILE_CONTAINER_LOCAL_PATH)
 
     def _restart_engine_service(self, container: model.Container) -> None:
         """Restarts the Engine service using the Pebble container API.
         """
-        LOG.debug("Restarting Engine service")
+        logger.debug("Restarting Engine service")
         container.restart("engine")
-        LOG.debug("Successfully issues Engine service restart")
+        logger.debug("Successfully issues Engine service restart")
 
     def _reconfigure_engine_service(self) -> None:
         """Generates the JSON config for the Engine server and adds it into
@@ -309,24 +294,23 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         possible_blocked_status = (
             self._add_base_service_config_from_charm_config(config))
         if possible_blocked_status:
-            LOG.warning("Missing/erroneous configuration options")
+            logger.warning("Missing/erroneous configuration options")
             self.unit.status = possible_blocked_status
             return
 
         container = self.unit.get_container("engine")
-        with container.can_connect():
-            LOG.debug("Updating Engine service configuration")
+        if container.can_connect():
+            logger.debug("Updating Engine service configuration")
             self._update_engine_service_config(container, config)
             self._restart_engine_service(container)
             self.unit.status = model.ActiveStatus(
                 "Engine service has been started.")
             return
 
-        LOG.info("Engine container is not active yet. No config to update.")
+        logger.info("Engine container is not active yet. No config to update.")
         self.unit.status = model.BlockedStatus(
             "Awaiting Legend SDLC, Mongo, and Gitlab relations.")
 
-    @_logged_charm_entry_point
     def _on_config_changed(self, _) -> None:
         """Reacts to configuration changes to the service by:
         - regenerating the JSON config for the Engine service
@@ -335,11 +319,9 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         """
         self._reconfigure_engine_service()
 
-    @_logged_charm_entry_point
     def _on_db_relation_joined(self, event: charm.RelationJoinedEvent):
-        LOG.debug("No actions are to be performed during Mongo relation join")
+        logger.debug("No actions are to be performed during Mongo relation join")
 
-    @_logged_charm_entry_point
     def _on_db_relation_changed(
             self, event: charm.RelationChangedEvent) -> None:
         rel_id = event.relation.id
@@ -350,7 +332,7 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
                 "Awaiting DB relation data.")
             event.defer()
             return
-        LOG.debug(
+        logger.debug(
             "Mongo JSON credentials returned by DB relation: %s",
             mongo_creds_json)
 
@@ -358,13 +340,13 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         try:
             mongo_creds = json.loads(mongo_creds_json)
         except (ValueError, TypeError) as ex:
-            LOG.warn(
+            logger.warn(
                 "Exception occured while deserializing DB relation "
                 "connection data: %s", str(ex))
             self.unit.status = model.BlockedStatus(
                 "Could not deserialize Legend DB connection data.")
             return
-        LOG.debug(
+        logger.debug(
             "Deserialized Mongo credentials returned by DB relation: %s",
             mongo_creds)
 
