@@ -30,6 +30,9 @@ requires:
     optional: false
     scope: global
 
+  ingress:
+    interface: ingress
+
 provides:
   legend-engine:
     interface: legend_engine

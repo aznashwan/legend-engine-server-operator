@@ -13,6 +13,8 @@ from ops import framework
 from ops import main
 from ops import model
 
+from charms.nginx_ingress_integrator.v0 import ingress
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,16 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
         super().__init__(*args)
 
         self._set_stored_defaults()
+
+        self.ingress = ingress.IngressRequires(
+            self,
+            {
+                "service-hostname": self.app.name,
+                "service-name": self.app.name,
+                "service-port": self.model.config[
+                    'server-application-connector-port-http'],
+            },
+        )
 
         # Standard charm lifecycle events:
         self.framework.observe(
