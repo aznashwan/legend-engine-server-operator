@@ -13,6 +13,7 @@ from ops import framework
 from ops import main
 from ops import model
 
+from charms.finos_legend_db_k8s.v0 import legend_database
 from charms.nginx_ingress_integrator.v0 import ingress
 
 
@@ -21,9 +22,15 @@ logger = logging.getLogger(__name__)
 ENGINE_CONFIG_FILE_CONTAINER_LOCAL_PATH = "/engine-config.json"
 ENGINE_SERVICE_URL_FORMAT = "%(schema)s://%(host)s:%(port)s%(path)s"
 
-APPLICATION_CONNECTOR_TYPE_HTTP = "http"
-APPLICATION_CONNECTOR_TYPE_HTTPS = "https"
+APPLICATION_ROOT_PATH = "/api"
 
+APPLICATION_CONNECTOR_TYPE_HTTP = "http"
+APPLICATION_CONNECTOR_PORT_HTTP = 6060
+APPLICATION_CONNECTOR_TYPE_HTTPS = "https"
+APPLICATION_CONNECTOR_PORT_HTTPS = 6066
+
+APPLICATION_LOGGING_FORMAT = (
+    "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%thread] %c - %m%n")
 VALID_APPLICATION_LOG_LEVEL_SETTINGS = [
     "INFO", "WARN", "DEBUG", "TRACE", "OFF"]
 
@@ -34,7 +41,7 @@ GITLAB_OPENID_DISCOVERY_URL = (
     "https://gitlab.com/.well-known/openid-configuration")
 
 
-class LegendEngineServerOperatorCharm(charm.CharmBase):
+class LegendEngineServerCharm(charm.CharmBase):
     """ Charmed operator for the FINOS Legend Engine Server. """
 
     _stored = framework.StoredState()
@@ -44,13 +51,14 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
 
         self._set_stored_defaults()
 
+        self._legend_db_consumer = legend_database.LegendDatabaseConsumer(
+            self)
         self.ingress = ingress.IngressRequires(
             self,
             {
                 "service-hostname": self.app.name,
                 "service-name": self.app.name,
-                "service-port": self.model.config[
-                    'server-application-connector-port-http'],
+                "service-port": APPLICATION_CONNECTOR_PORT_HTTP,
             },
         )
 
@@ -78,7 +86,7 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
 
     def _set_stored_defaults(self) -> None:
         self._stored.set_default(log_level="DEBUG")
-        self._stored.set_default(mongodb_credentials={})
+        self._stored.set_default(legend_db_credentials={})
 
     def _on_engine_pebble_ready(self, event: framework.EventBase) -> None:
         """Define the Engine workload using the Pebble API.
@@ -170,36 +178,17 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
             "server-pac4j-logging-level")
         server_logging_level = self._get_logging_level_from_config(
             "server-logging-level")
-        server_logging_format = self.model.config['server-logging-format']
         if not all([pac4j_logging_level, pac4j_logging_level]):
             return model.BlockedStatus(
                 "One or more logging config options are improperly formatted "
                 "or missing. Please review the debug-log for more details.")
 
         # Check Mongo-related options:
-        mongo_creds = self._stored.mongodb_credentials
-        if not mongo_creds or 'replica_set_uri' not in mongo_creds:
+        mongo_creds = self._stored.legend_db_credentials
+        if not mongo_creds:
             return model.BlockedStatus(
                 "No stored MongoDB credentials were found yet. Please "
                 "ensure the Charm is properly related to MongoDB.")
-        mongo_replica_set_uri = self._stored.mongodb_credentials[
-            'replica_set_uri']
-        databases = mongo_creds.get('databases')
-        database_name = None
-        if databases:
-            database_name = databases[0]
-            # NOTE(aznashwan): the Java MongoDB can't handle DB names in the
-            # URL, so we need to trim that part and pass the database name
-            # as a separate parameter within the config as the
-            # engine_config['pac4j']['mongoDb'] option below.
-            split_uri = [
-                elem
-                for elem in mongo_replica_set_uri.split('/')[:-1]
-                # NOTE: filter any empty strings resulting from double-slashes:
-                if elem]
-            # NOTE: schema prefix needs two slashes added back:
-            mongo_replica_set_uri = "%s//%s" % (
-                split_uri[0], "/".join(split_uri[1:]))
 
         # Compile base config:
         engine_config.update({
@@ -218,13 +207,13 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
                 },
                 "appenders": [{
                     "type": "console",
-                    "logFormat": server_logging_format
+                    "logFormat": APPLICATION_LOGGING_FORMAT
                 }]
             },
             "pac4j": {
                 "callbackPrefix": "",
-                "mongoUri": mongo_replica_set_uri,
-                "mongoDb": database_name,
+                "mongoUri": mongo_creds['uri'],
+                "mongoDb": mongo_creds['database'],
                 "bypassPaths": ["/api/server/v1/info"],
                 "clients": [{
                     "org.finos.legend.server.pac4j.gitlab.GitlabClient": {
@@ -255,7 +244,7 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
             "swagger": {
                 "title": "Legend Engine",
                 "resourcePackage": "org.finos.legend",
-                "uriPrefix": self.model.config['server-root-path']
+                "uriPrefix": APPLICATION_ROOT_PATH
             },
             "server": {
                 "type": "simple",
@@ -265,8 +254,7 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
                 "connector": {
                     "maxRequestHeaderSize": "32KiB",
                     "type": APPLICATION_CONNECTOR_TYPE_HTTP,
-                    "port": self.model.config[
-                        'server-application-connector-port-http']
+                    "port": APPLICATION_CONNECTOR_PORT_HTTP
                 },
             },
             # TODO(aznashwan): check whether this is how you reference the SDLC
@@ -346,33 +334,17 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
 
     def _on_db_relation_changed(
             self, event: charm.RelationChangedEvent) -> None:
-        rel_id = event.relation.id
-        rel = self.framework.model.get_relation("legend-db", rel_id)
-        mongo_creds_json = rel.data[event.app].get("legend-db-connection")
-        if not mongo_creds_json:
+        mongo_creds = self._legend_db_consumer.get_legend_database_creds(
+            event.relation.id)
+        if not mongo_creds:
             self.unit.status = model.WaitingStatus(
                 "Awaiting DB relation data.")
             event.defer()
             return
         logger.debug(
-            "Mongo JSON credentials returned by DB relation: %s",
-            mongo_creds_json)
-
-        mongo_creds = None
-        try:
-            mongo_creds = json.loads(mongo_creds_json)
-        except (ValueError, TypeError) as ex:
-            logger.warn(
-                "Exception occured while deserializing DB relation "
-                "connection data: %s", str(ex))
-            self.unit.status = model.BlockedStatus(
-                "Could not deserialize Legend DB connection data.")
-            return
-        logger.debug(
-            "Deserialized Mongo credentials returned by DB relation: %s",
+            "Mongo credentials returned by DB relation: %s",
             mongo_creds)
-
-        self._stored.mongodb_credentials = mongo_creds
+        self._stored.legend_db_credentials = mongo_creds
 
         # Attempt to reconfigure and restart the service with the new data:
         self._reconfigure_engine_service()
@@ -384,9 +356,8 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
             # NOTE(aznashwan): we always return the plain HTTP endpoint:
             "schema": "http",
             "host": ip_address,
-            "port": self.model.config[
-                "server-application-connector-port-http"],
-            "path": self.model.config["server-root-path"]})
+            "port": APPLICATION_CONNECTOR_PORT_HTTP,
+            "path": APPLICATION_ROOT_PATH})
 
     def _on_studio_relation_joined(
             self, event: charm.RelationJoinedEvent) -> None:
@@ -402,4 +373,4 @@ class LegendEngineServerOperatorCharm(charm.CharmBase):
 
 
 if __name__ == "__main__":
-    main.main(LegendEngineServerOperatorCharm)
+    main.main(LegendEngineServerCharm)

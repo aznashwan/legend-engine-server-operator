@@ -1,12 +1,12 @@
 # Copyright 2021 Canonical
 # See LICENSE file for licensing details.
 
-name: legend-engine-server-operator
+name: finos-legend-engine-k8s
+display-name: FINOS Legend Engine Server
 
 # TODO(aznashwan): ask who should be here:
 maintainer: Nashwan Azhari <nazhari@cloudbasesolutions.com>
 
-display-name: FINOS Legend Engine Server
 summary: |
   Execution Engine for Fintech applications written in the Pure DSL.
 
@@ -15,17 +15,9 @@ description: |
   Specific Language. It acts as both a compiler and execution engine for
   running complex business application wrotten in Pure.
 
-# TODO(aznashwan): request feedback for these:
-tags:
-- finos
-- fintech
-- legend
-
 requires:
   legend-db:
     interface: legend_mongodb
-    # TODO(aznashwan): will we need a second relation for the PAC4J Mongo
-    # backend settings or can we have two databases created in just one?
     limit: 1
     optional: false
     scope: global
@@ -36,7 +28,6 @@ requires:
 provides:
   legend-engine:
     interface: legend_engine
-    scope: global
 
 containers:
   engine:
