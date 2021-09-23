@@ -30,9 +30,3 @@ options:
 
   # TODO(aznashwan): ask whether 'opentracing' options are worth exposing.
   # https://github.com/finos/legend/blob/master/installers/docker-compose/shared/templates/engine/config.json#L45
-
-  # TODO(aznashwan): remove these after gitlab relation defined:
-  gitlab-client-id:
-    type: string
-  gitlab-client-secret:
-    type: string

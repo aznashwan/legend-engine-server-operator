@@ -22,6 +22,12 @@ requires:
     optional: false
     scope: global
 
+  legend-engine-gitlab:
+    interface: legend_engine_gitlab
+    limit: 1
+    optional: false
+    scope: global
+
   ingress:
     interface: ingress
 
