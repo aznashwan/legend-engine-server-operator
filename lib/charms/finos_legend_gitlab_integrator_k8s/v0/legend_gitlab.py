@@ -41,11 +41,13 @@ def _validate_legend_gitlab_credentials(creds):
     return True
 
 
-def set_legend_gitlab_creds_in_relation_data(relation_data, creds):
+def set_legend_gitlab_creds_in_relation_data(
+        relation_data, creds, validate_creds=True):
     """Set connection data for GitLab from the provided relation data.
 
     Args:
         relation_data: Data of the relation to set the info into.
+        validate_creds: Whether or not to check the structure of the data.
 
     Returns:
         True if the provided creds were successfully set.
@@ -53,7 +55,14 @@ def set_legend_gitlab_creds_in_relation_data(relation_data, creds):
     Raises:
         ValueError: if the provided credentials are misformatted.
     """
-    _validate_legend_gitlab_credentials(creds)
+    try:
+        _validate_legend_gitlab_credentials(creds)
+    except ValueError:
+        if not validate_creds:
+            raise
+        logger.warning(
+            "Setting incorrectly structured GitLab relation data '%s'",
+            creds)
     relation_data["legend-gitlab-connection"] = json.dumps(creds)
     return True
 

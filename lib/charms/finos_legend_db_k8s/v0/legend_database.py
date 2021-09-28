@@ -116,7 +116,7 @@ class LegendDatabaseConsumer(framework.Object):
         self.relation_name = relation_name
 
     def get_legend_database_creds(self, relation_id):
-        """Get connection data for MongoDB from the provided relation data.
+        """Get connection data for MongoDB from the provided relation.
 
         Args:
             relation_id: ID of the relation to fetch data from.
@@ -129,6 +129,10 @@ class LegendDatabaseConsumer(framework.Object):
                 "password": "<password>",
                 "database": "<database name>"
             }
+
+        Raises:
+            TooManyRelatedAppsError if relation id is not provided and
+            multiple relation of the same name are present.
         """
         relation = self.framework.model.get_relation(
             self.relation_name, relation_id)
