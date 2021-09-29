@@ -22,7 +22,8 @@ LIBPATCH = 0
 
 REQUIRED_LEGEND_GITLAB_CREDENTIALS = [
     "client_id", "client_secret", "openid_discovery_url",
-    "gitlab_host", "gitlab_port", "gitlab_scheme"]
+    "gitlab_host", "gitlab_port", "gitlab_scheme",
+    "gitlab_host_cert_b64"]
 
 logger = logging.getLogger(__name__)
 
