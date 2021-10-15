@@ -11,9 +11,7 @@ from ops import charm
 from ops import main
 from ops import model
 
-from finos_legend_operator import constants
-from finos_legend_operator import base_operator
-from finos_legend_operator import utils
+from charms.finos_legend_libs.v0 import legend_operator_base
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +39,7 @@ APPLICATION_LOGGING_FORMAT = (
 GITLAB_REQUIRED_SCOPES = ["openid", "profile", "api"]
 
 
-class LegendEngineServerCharm(base_operator.BaseFinosLegendCoreServiceCharm):
+class LegendEngineServerCharm(legend_operator_base.BaseFinosLegendCoreServiceCharm):
     """ Charmed operator for the FINOS Legend Engine Server. """
 
     def __init__(self, *args):
@@ -114,7 +112,8 @@ class LegendEngineServerCharm(base_operator.BaseFinosLegendCoreServiceCharm):
         cert = self._get_legend_gitlab_certificate()
         if cert:
             # NOTE(aznashwan): cert label 'gitlab-engine' is arbitrary:
-            jks_prefs['trusted_certificates']['gitlab-engine'] = cert
+            jks_prefs["trusted_certificates"]["gitlab-engine"] = cert
+        return jks_prefs
 
     @classmethod
     def _get_legend_gitlab_relation_name(cls):
@@ -125,10 +124,10 @@ class LegendEngineServerCharm(base_operator.BaseFinosLegendCoreServiceCharm):
         return LEGEND_DB_RELATION_NAME
 
     def _get_engine_service_url(self):
-        ip_address = utils.get_ip_address()
+        ip_address = legend_operator_base.get_ip_address()
         return ENGINE_SERVICE_URL_FORMAT % ({
             # NOTE(aznashwan): we always return the plain HTTP endpoint:
-            "schema": constants.APPLICATION_CONNECTOR_TYPE_HTTP,
+            "schema": legend_operator_base.APPLICATION_CONNECTOR_TYPE_HTTP,
             "host": ip_address,
             "port": APPLICATION_CONNECTOR_PORT_HTTP,
             "path": APPLICATION_ROOT_PATH})
@@ -230,7 +229,7 @@ class LegendEngineServerCharm(base_operator.BaseFinosLegendCoreServiceCharm):
                 "requestLog": {"appenders": []},
                 "connector": {
                     "maxRequestHeaderSize": "32KiB",
-                    "type": constants.APPLICATION_CONNECTOR_TYPE_HTTP,
+                    "type": legend_operator_base.APPLICATION_CONNECTOR_TYPE_HTTP,
                     "port": APPLICATION_CONNECTOR_PORT_HTTP
                 },
             },

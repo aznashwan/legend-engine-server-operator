@@ -1,4 +1,3 @@
-git+https://github.com/canonical/finos-legend-libs.git
-PyYAML
-# NOTE(aznashwan): required by finos-legend-libs:
 git+https://github.com/canonical/operator.git
+pyjks
+pyOpenSSL
