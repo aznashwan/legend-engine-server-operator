@@ -16,7 +16,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 LEGEND_DB_RELATION_DATA_KEY = "legend-db-connection"
 REQUIRED_LEGEND_DATABASE_CREDENTIALS = [
@@ -161,8 +161,6 @@ class LegendDatabaseConsumer(framework.Object):
                 "No relation of name '%s' and ID '%s' was found.",
                 self.relation_name, relation_id)
             return {}
-        print("### Rel data: %s" % relation.data)
-        print("### Rel appe: %s" % relation.app)
         relation_data = relation.data[relation.app]
 
         creds_data = relation_data.get(LEGEND_DB_RELATION_DATA_KEY, "{}")
