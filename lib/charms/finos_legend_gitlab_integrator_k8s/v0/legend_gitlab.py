@@ -9,16 +9,15 @@ import logging
 
 from ops import framework
 
-
 # The unique Charmhub library identifier, never change it
-LIBID = "c31b1a71091248029dbc029989f35343"
+LIBID = "4f850403ae5d45aba38e3beaf3eb829e"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 0
+LIBPATCH = 2
 
 REQUIRED_LEGEND_GITLAB_CREDENTIALS = [
     "client_id", "client_secret", "openid_discovery_url",
@@ -32,19 +31,30 @@ def _validate_legend_gitlab_credentials(creds):
     """Raises a ValueError if the provided gitlab creds isn't a dict
     or has missing keys/void values.
     """
-    if not isinstance(creds, dict) and any([
-            not creds.get(k)
+    if not isinstance(creds, dict):
+        raise ValueError("Gitlab creds must be a dict, got: %r", creds)
+    if any([creds.get(k) is None
             for k in REQUIRED_LEGEND_GITLAB_CREDENTIALS]):
         raise ValueError(
             "Improper gitlab credentials provided, must be a dict with "
             "the following keys: %s. Got: %r" % (
                 REQUIRED_LEGEND_GITLAB_CREDENTIALS, creds))
+    str_keys = [
+        "client_id", "client_secret", "openid_discovery_url", "gitlab_host",
+        "gitlab_scheme", "gitlab_host_cert_b64"]
+    mistyped_strs = {
+        key: creds[key] for key in str_keys if not isinstance(creds[key], str)}
+    if mistyped_strs:
+        raise ValueError(
+            "Following keys must have string values: %s" % mistyped_strs)
+    if not isinstance(creds['gitlab_port'], int):
+        raise ValueError("Port must be an int, got: %r" % creds['gitlab_port'])
     return True
 
 
 def set_legend_gitlab_creds_in_relation_data(
         relation_data, creds, validate_creds=True):
-    """Set connection data for GitLab from the provided relation data.
+    """Set connection data for GitLab in the provided relation data.
 
     Args:
         relation_data: Data of the relation to set the info into.
@@ -59,7 +69,7 @@ def set_legend_gitlab_creds_in_relation_data(
     try:
         _validate_legend_gitlab_credentials(creds)
     except ValueError:
-        if not validate_creds:
+        if validate_creds:
             raise
         logger.warning(
             "Setting incorrectly structured GitLab relation data '%s'",
@@ -82,7 +92,7 @@ def _validate_legend_gitlab_redirect_uris(redirect_uris):
 
 def set_legend_gitlab_redirect_uris_in_relation_data(
         relation_data, redirect_uris):
-    """Set connection data for GitLab from the provided relation data.
+    """Set redirect URI list for OAuth redirects in the provided relation data.
 
     Args:
         redirect_uris: list of strings of redirect URLs for this service.
@@ -130,6 +140,11 @@ class LegendGitlabConsumer(framework.Object):
             {
                 "client_id": "<client_id>",
                 "client_secret": "<client_secret>"
+                "openid_discovery_url": "<URL>",
+                "gitlab_host": "<GitLab hostname or IP>",
+                "gitlab_port": <port>,
+                "gitlab_scheme": "<http/https>",
+                "gitlab_host_cert_b64": "<base64 DER certificate>"
             }
 
         Raises:
@@ -139,6 +154,11 @@ class LegendGitlabConsumer(framework.Object):
         """
         relation = self.framework.model.get_relation(
             self.relation_name, relation_id)
+        if not relation:
+            logger.warning(
+                "No relation of type '%s' with ID '%s' could be found.",
+                self.relation_name, relation_id)
+            return {}
         relation_data = relation.data[relation.app]
 
         creds = None
@@ -173,7 +193,16 @@ class LegendGitlabConsumer(framework.Object):
         """
         relation = self.framework.model.get_relation(
             self.relation_name, relation_id)
+        if not relation:
+            logger.warning(
+                "No relation of type '%s' with ID '%s' could be found.",
+                self.relation_name, relation_id)
+            return []
         relation_data = relation.data[relation.app]
+
+        print("all rel data:", relation.data)
+        print("rel_data:", relation_data)
+        print("rel.app", relation.app.name)
 
         redirect_uris = None
         redirect_uris_data = relation_data.get(
@@ -182,8 +211,11 @@ class LegendGitlabConsumer(framework.Object):
             redirect_uris = json.loads(redirect_uris_data)
         except Exception as ex:
             raise ValueError(
-                "Could not deserialize Legend GitLab URIs JSON: %s." % (
+                "Could not deserialize Legend GitLab URIs JSON: %s" % (
                     redirect_uris_data)) from ex
+
+        if not redirect_uris:
+            return []
         _validate_legend_gitlab_redirect_uris(redirect_uris)
 
         return redirect_uris
