@@ -28,7 +28,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 logger = logging.getLogger(__name__)
 
@@ -250,8 +250,8 @@ class BaseFinosLegendCharm(charm.CharmBase):
             "truststore_path": "/container/path/to/put/truststore.jks",
             "truststore_passphrase": "<passphrase for truststore>",
             "trusted_certificates": {
-                "cert_name_1": <OpenSSL.crypto.X509>,
-                "cert_name_2": <OpenSSL.crypto.X509>
+                "cert_name_1": "<base64-encoded DER or PEM>",
+                "cert_name_2": "<base64-encoded DER or PEM>"
             }
         }
         """
@@ -391,8 +391,8 @@ class BaseFinosLegendCharm(charm.CharmBase):
                 "truststore_path": "/container/path/to/put/truststore.jks",
                 "truststore_passphrase": "<passphrase for truststore>",
                 "trusted_certificates": {
-                    "cert_name_1": <OpenSSL.crypto.X509>,
-                    "cert_name_2": <OpenSSL.crypto.X509>
+                    "cert_name_1": "<base64-encoded DER or PEM>",
+                    "cert_name_2": "<base64-encoded DER or PEM>"
                 }
             }
 
@@ -416,11 +416,22 @@ class BaseFinosLegendCharm(charm.CharmBase):
             return model.BlockedStatus(
                 "invalid JKS truststore certs list given")
 
+        # Parse all the certs:
+        trusted_certs = {}
+        for cert_name, cert_b64 in truststore_preferences["trusted_certificates"].items():
+            try:
+                trusted_certs[cert_name] = parse_base64_certificate(cert_b64)
+            except Exception:
+                logger.error(
+                    "Exception occurred while parsing cert '%s': %s",
+                    cert_name, traceback.format_exc())
+                return model.BlockedStatus(
+                    "failed to parse JKS truststore cert '%s'" % cert_name)
+
         # Create truststore:
         truststore = None
         try:
-            truststore = create_jks_truststore_with_certificates(
-                truststore_preferences['trusted_certificates'])
+            truststore = create_jks_truststore_with_certificates(trusted_certs)
         except Exception:
             logger.error(
                 "Exception occurred while creating truststore with params "
@@ -748,5 +759,4 @@ class BaseFinosLegendCoreServiceCharm(BaseFinosLegendCharm):
             self._legend_gitlab_consumer.get_legend_gitlab_creds(None))
         if not gitlab_creds or 'gitlab_host_cert_b64' not in gitlab_creds:
             return None
-        return parse_base64_certificate(
-            gitlab_creds['gitlab_host_cert_b64'])
+        return gitlab_creds['gitlab_host_cert_b64']

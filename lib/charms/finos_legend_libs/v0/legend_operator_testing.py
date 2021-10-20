@@ -23,7 +23,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 3
 
 
 TEST_CERTIFICATE_BASE64 = """
@@ -75,7 +75,7 @@ class BaseFinosLegendTestCharm(legend_operator_base.BaseFinosLegendCharm):
         "truststore_path": "/path/to/truststore.jks",
         "truststore_passphrase": "legend-test",
         "trusted_certificates": {
-            "testing-cert-1": TEST_CERTIFICATE}}
+            "testing-cert-1": TEST_CERTIFICATE_BASE64}}
 
     def __init__(self, framework):
         super().__init__(framework)
@@ -113,7 +113,7 @@ class BaseFinosLegendTestCharm(legend_operator_base.BaseFinosLegendCharm):
     def _get_service_configs_clone(self, relation_data):
         """Should return the same as `self._get_service_configs` but should NOT
         call it directly to not taint test results."""
-        return self.RELATIONS_DATA
+        return copy.deepcopy(self.SERVICE_CONFIG_FILES)
 
 
 class BaseFinosLegendCharmTestCase(unittest.TestCase):
@@ -306,18 +306,12 @@ class BaseFinosLegendCharmTestCase(unittest.TestCase):
                 self.harness.charm.unit.status.message,
                 "missing following relations: %s" % ", ".join(relation_names))
 
-            # Config retrieval should have never been attempted:
-            get_configs_mock.assert_not_called()
-
             # Services should be called to stop with any non-standard status:
             _container_stop_mock.assert_called_with(
                 tuple(self.harness.charm._get_workload_service_names()))
 
         self.harness.set_leader()
         self.harness.begin_with_initial_hooks()
-        get_configs_mock = mock.MagicMock()
-        self.harness.charm._get_service_configs = get_configs_mock
-        get_configs_mock.return_value = self.harness.charm._get_service_configs_clone({})
 
         # We initially expect it to complain about all relations:
         _check_charm_missing_relations(self.harness.charm.RELATIONS)
@@ -335,9 +329,9 @@ class BaseFinosLegendCharmTestCase(unittest.TestCase):
 
         trust_prefs = self.harness.charm._get_jks_truststore_preferences()
         self.mocked_create_jks_truststore_with_certificates.assert_has_calls(
-            [mock.call(trust_prefs["trusted_certificates"])])
-        get_configs_mock.assert_has_calls(
-            [mock.call(self.harness.charm._get_relations_test_data())])
+            [mock.call({
+                cert_name: self.mocked_parse_base64_certificate.return_value
+                for cert_name in trust_prefs["trusted_certificates"]})])
 
         # Check all config files present:
         container = self.harness.charm.unit.get_container(
@@ -364,24 +358,27 @@ class BaseFinosLegendCoreServiceTestCharm(
         legend_operator_base.BaseFinosLegendCoreServiceCharm, BaseFinosLegendTestCharm):
     """Testing Charm class for Legend services requiring Gitlab/Mongo relations.
 
-    Override the class attributes of this class as well as the parent `BaseFinosLegendTestCharm`
-    for easy setup of a skeleton class to use in test suites or slot functionality in to test.
+    Override the class attributes of this class as well as the parent
+    `BaseFinosLegendTestCharm` for easy setup of a skeleton class to use in test
+    suites or slot functionality in to test.
     """
     REDIRECT_URIS = ["http://service.legend:443/callback"]
 
+    DB_RELATION_NAME = "legend_db"
+    GITLAB_RELATION_NAME = "legend_gitlab"
     # NOTE(aznashwan): DB relation is always checked first:
-    RELATIONS = ['legend_db', 'legend_gitlab']
+    RELATIONS = [DB_RELATION_NAME, GITLAB_RELATION_NAME]
     RELATIONS_DATA = {
-        "legend_db": {"database": "DB relation test data"},
-        "legend_gitlab": {"gitlab": "GitLab relation test data"}}
+        DB_RELATION_NAME: {"database": "DB relation test data"},
+        GITLAB_RELATION_NAME: {"gitlab": "GitLab relation test data"}}
 
     @classmethod
     def _get_legend_gitlab_relation_name(cls):
-        return "legend_gitlab"
+        return cls.GITLAB_RELATION_NAME
 
     @classmethod
     def _get_legend_db_relation_name(cls):
-        return "legend_db"
+        return cls.DB_RELATION_NAME
 
     def _get_legend_gitlab_redirect_uris(self):
         return self.REDIRECT_URIS
