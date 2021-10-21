@@ -24,8 +24,8 @@ $ juju deploy finos-legend-engine-k8s --channel=edge
 ## Relations
 
 The standalone Engine will initially be blocked, and will require being later
-related to the [Legend Database Operator](https://github.com/aznashwan/legend-database-manager),
-as well as the [Legend GitLab Integrator](https://github.com/aznashwan/finos-legend-gitlab-integrator-k8s).
+related to the [Legend Database Operator](https://github.com/canonical/finos-legend-db-operator),
+as well as the [Legend GitLab Integrator](https://github.com/canonical/finos-legend-gitlab-integrator).
 
 ```sh
 $ juju deploy finos-legend-db-k8s finos-legend-gitlab-integrator-k8s
